@@ -1,13 +1,16 @@
 export default class Helpers {
     static processData(data, timePortion) {
         return new Promise((resolve, reject) => {
+            if(!data.length)
+                reject(new Error("Bad data"));
+                            
             let trainX = [], trainY = [], size = data.length, features = [];        
-    
+
             for(let i = 0; i < size; i++) {
                 features.push(data[i]['close']);
             }
     
-            var scaledData = minMaxScaler(features, getMin(features), getMax(features));
+            var scaledData = this.minMaxScaler(features, this.getMin(features), this.getMax(features));
             let scaledFeatures = scaledData.data;
     
             try {
