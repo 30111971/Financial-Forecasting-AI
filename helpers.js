@@ -4,7 +4,7 @@ export default class Helpers {
             if(!data.length)
                 reject(new Error("Bad data"));
                             
-            let trainX = [], trainY = [], size = data.length, features = [];        
+            let trainX = [], trainY = [], size = data.length, features = [];
 
             for(let i = 0; i < size; i++) {
                 features.push(data[i]['close']);

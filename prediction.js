@@ -15,13 +15,13 @@ var partialMessage;
 
 const buildCnn = (data, timePortion) => {
     return new Promise((resolve, reject) => {
-        if(timePortion <= 0 || !timePortion || !data)
+        if(parseInt(timePortion) <= 0 || !parseInt(timePortion) || !data)
             return reject(new Error("Bad parameters in buildCnn function"));
         
         const model = tf.sequential({
             layers: [
                 tf.layers.inputLayer({
-                    inputShape: [timePortion, 1],
+                    inputShape: [parseInt(timePortion), 1],
                 }),
                 tf.layers.conv1d({
                     kernelSize: 2,
@@ -67,14 +67,14 @@ const cnn = (model, data, epochs) => {
     console.log("Sequential model's layers: ");
     model.summary();    
 
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         try {
             model.compile({ optimizer: process.env.optimizer, loss: process.env.loss });
 
-            model.fit(data.tensorTrainX, data.tensorTrainY, {
+            await model.fit(data.tensorTrainX, data.tensorTrainY, {
                 epochs: epochs
             }).then(result => {
-                Helpers.print(`Loss after last Epoch (${result.epochs.length}) is: ${result.history.loss[result.epochs.length-1]}`);
+                Helpers.print(`Loss after last Epoch (${result.params.epochs.length}) is: ${result.history.loss[result.params.epochs.length-1]}`);
                 resolve(model)                
             })
         } catch(err) {
@@ -119,25 +119,23 @@ const getHistoricalData = (frequency, period1, period2) => {
     })    
 }
 
-const now = Math.floor(Date.now() / 1000);
-const until = Math.floor(Date.UTC(2018, 11) / 1000);
+const period1 = 1546448400
+const period2 = 1562086800
 
 const predict = () => {
-    getHistoricalData("1d", now, until)
-        .then(data => {            gi
-            let labels = data.map(function (val) { return val['date']; });
-
-            Helpers.processData(data, timePortion)
-                .then(result => {
-                    let nextDayPrediction = Helpers.generateNextDayPrediction(result.originalData, result.timePortion);
+    getHistoricalData("1d", period1, period2)
+        .then(data => {                                
+            Helpers.processData(data, parseInt(timePortion))
+                .then(result => {                 
+                    let nextDayPrediction = Helpers.generateNextDayPrediction(result.originalData, parseInt(result.timePortion));
                     
-                    buildCnn(result, timePortion)
+                    buildCnn(result, parseInt(timePortion))
                         .then(built => {
-
+                            
                             let tensorData = {
-                                tensorTrainX: tf.tensor1d(built.data.trainX).reshape([built.data.size, built.data.timePortion, 1]),
+                                tensorTrainX: tf.tensor1d(built.data.trainX).reshape([built.data.size, parseInt(built.data.timePortion), 1]),
                                 tensorTrainY: tf.tensor1d(built.data.trainY)
-                            };
+                            };                            
                             
                             let max = built.data.max;
                             let min = built.data.min;
@@ -146,27 +144,48 @@ const predict = () => {
                                 var predictedX = model.predict(tensorData.tensorTrainX);
 
                                 let nextDayPredictionScaled = Helpers.minMaxScaler(nextDayPrediction, min, max);
-                                let tensorNextDayPrediction = tf.tensor1d(nextDayPredictionScaled.data).reshape([1, built.data.timePortion, 1]);
+                                
+                                let tensorNextDayPrediction = tf.tensor1d(nextDayPredictionScaled.data).reshape([1, parseInt(built.data.timePortion), 1]);
 
                                 let predictedValue = model.predict(tensorNextDayPrediction);
                                 
                                 predictedValue.data().then(predValue => {
+                                    if(predValue.constructor === Float32Array)
+                                        predValue = Array.prototype.slice.call(predValue);
+                                                                        
                                     let inversePredictedValue = Helpers.minMaxInverseScaler(predValue, min, max);
 
                                     predictedX.data().then(pred => {
+                                        if(pred.constructor !== Array)
+                                            pred = Array.prototype.slice.call(pred);
+                                        
+                                        if(built.data.trainY.constructor !== Array)
+                                            built.data.trainY = Array.prototype.slice.call(built.data.trainY);
+                                        
                                         var predictedXInverse = Helpers.minMaxInverseScaler(pred, min, max);
 
                                         predictedXInverse.data = Array.prototype.slice.call(predictedXInverse.data);
 
                                         predictedXInverse.data[predictedXInverse.data.length] = inversePredictedValue.data[0];
-
-                                        var trainYInverse = Helpers.minMaxInverseScaler((built.data.trainY, min, max));                                        
+                                        
+                                        var trainYInverse = Helpers.minMaxInverseScaler(built.data.trainY, min, max);                                        
                                     })
 
-                                    Helpers.print("Predicted Stock Price of " + enterprise + " for next day is: " + inversePredictedValue.data[0].toFixed(3) + "$");
+                                    Helpers.print("Predicted Close Price of " + enterprise + " for next day is: " + inversePredictedValue.data[0].toFixed(3) + "$");
+                                    
+                                    let prediction = inversePredictedValue.data[0].toFixed(3);
+                                    
                                 })
                             })
+                            .catch(err => {
+                                console.error(err)
+                            })
+                        }).catch(err => {
+                            console.error(err)
                         })
+                })
+                .catch(err => {
+                    console.error(err)
                 })
         })
         .catch(err => {
@@ -174,4 +193,4 @@ const predict = () => {
         })
 }
 
-predict()
+predict();
