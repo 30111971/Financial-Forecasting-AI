@@ -1,5 +1,5 @@
 export default class Helpers {
-    static processData(data, timePortion) {
+    static processData(data, timePortion, item) {
         return new Promise((resolve, reject) => {
             if(!data.length)
                 reject(new Error("Bad data"));
@@ -7,7 +7,7 @@ export default class Helpers {
             let trainX = [], trainY = [], size = data.length, features = [];
 
             for(let i = 0; i < size; i++) {
-                features.push(data[i]['close']);
+                features.push(data[i][item]);
             }
     
             var scaledData = this.minMaxScaler(features, this.getMin(features), this.getMax(features));

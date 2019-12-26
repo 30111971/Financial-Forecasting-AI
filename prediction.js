@@ -5,14 +5,6 @@ import Helpers from './helpers'
 
 require('dotenv').config()
 
-Date.prototype.addDays = days => {
-    var date = new Date(this.valueOf());
-    date.setDate(date.getDate() + days);
-    return date;
-}
-
-var partialMessage;
-
 const buildCnn = (data, timePortion) => {
     return new Promise((resolve, reject) => {
         if(parseInt(timePortion) <= 0 || !parseInt(timePortion) || !data)
@@ -64,13 +56,10 @@ const buildCnn = (data, timePortion) => {
 }
 
 const cnn = (model, data, epochs) => {
-    console.log("Sequential model's layers: ");
-    model.summary();    
-
     return new Promise(async (resolve, reject) => {
         try {
             model.compile({ optimizer: process.env.optimizer, loss: process.env.loss });
-
+            console.log("Started prediction");
             await model.fit(data.tensorTrainX, data.tensorTrainY, {
                 epochs: epochs
             }).then(result => {
@@ -114,32 +103,58 @@ const getHistoricalData = (frequency, period1, period2) => {
             req.end(res => {
                 if (res.error) throw new Error(res.error);
             
-                resolve(res.body.prices)
-            });        
-    })    
+                resolve(res.body.prices.reverse());
+            });
+    });
 }
 
-const period1 = 1546448400
-const period2 = 1562086800
+const getDate = (actDate1, actDate2) => {
+    let actDateMills1 = new Date(`${actDate1[0]}/${actDate1[1]}/${actDate1[2]} ${actDate1[3]}:${actDate1[4]}:${actDate1[5]}`);        
+    actDateMills1 = actDateMills1.getTime();
+    let period1 = actDateMills1 / 1000;    
+
+    let actDateMills2 = new Date(`${actDate2[0]}/${actDate2[1]}/${actDate2[2]} ${actDate2[3]}:${actDate2[4]}:${actDate2[5]}`)
+    actDateMills2 = actDateMills2.getTime();
+    let period2 = actDateMills2 / 1000;
+
+    return {
+        period1: period1,
+        period2: period2
+    }
+}
+// Enter month, day, year, hours, minutes, seconds
+let actDate1 = ["02", "01", "2019", "15", "00", "00"];
+let actDate2 = ["02", "07", "2019", "15", "00", "00"];
+
+const period = getDate(actDate1, actDate2);
+const period1 = period.period1;
+const period2 = period.period2;
+const item = 'close'
 
 const predict = () => {
     getHistoricalData("1d", period1, period2)
-        .then(data => {                                
-            Helpers.processData(data, parseInt(timePortion))
+        .then(data => {
+            let labels = data.map(function (val) { 
+                let d = new Date(val['date'] * 1000);
+                let date = d.toLocaleString();
+                return date; 
+            });
+
+            Helpers.processData(data, parseInt(timePortion), item)
                 .then(result => {                 
                     let nextDayPrediction = Helpers.generateNextDayPrediction(result.originalData, parseInt(result.timePortion));
-                    
+
                     buildCnn(result, parseInt(timePortion))
                         .then(built => {
-                            
+
                             let tensorData = {
                                 tensorTrainX: tf.tensor1d(built.data.trainX).reshape([built.data.size, parseInt(built.data.timePortion), 1]),
                                 tensorTrainY: tf.tensor1d(built.data.trainY)
                             };                            
-                            
+
                             let max = built.data.max;
                             let min = built.data.min;
-                            
+     
                             cnn(built.model, tensorData, epochs).then(model => {
                                 var predictedX = model.predict(tensorData.tensorTrainX);
 
@@ -168,13 +183,16 @@ const predict = () => {
 
                                         predictedXInverse.data[predictedXInverse.data.length] = inversePredictedValue.data[0];
                                         
-                                        var trainYInverse = Helpers.minMaxInverseScaler(built.data.trainY, min, max);                                        
+                                        var trainYInverse = Helpers.minMaxInverseScaler(built.data.trainY, min, max);
+                                        
+                                        
                                     })
 
-                                    Helpers.print("Predicted Close Price of " + enterprise + " for next day is: " + inversePredictedValue.data[0].toFixed(3) + "$");
-                                    
                                     let prediction = inversePredictedValue.data[0].toFixed(3);
+
+                                    Helpers.print("Predicted Close Price of " + enterprise + " for next day is: " + prediction + "$");
                                     
+
                                 })
                             })
                             .catch(err => {
